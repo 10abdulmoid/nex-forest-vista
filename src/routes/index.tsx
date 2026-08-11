@@ -44,12 +44,14 @@ function LoginPage() {
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <div className="relative hidden flex-col justify-center gap-16 p-12 text-primary-foreground lg:flex" style={{ background: "var(--gradient-forest)" }}>
         <div className="topo-texture absolute inset-0 opacity-70" />
+        <div className="rings-bg absolute inset-0 opacity-40" />
+        <div className="absolute -right-24 top-1/4 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
         <div className="relative">
           <div className="[&_.text-foreground]:text-primary-foreground [&_.text-primary]:text-accent [&_.text-muted-foreground]:text-primary-foreground/60">
             <LogoLockup />
           </div>
         </div>
-        <div className="relative max-w-md">
+        <div className="relative max-w-md rise">
           <h2 className="font-display text-4xl font-semibold leading-tight">
             Plantation returns, recorded with precision.
           </h2>
@@ -62,8 +64,8 @@ function LoginPage() {
               ["07", "Divisions"],
               ["35", "Active entries"],
               ["4", "Rotations tracked"],
-            ].map(([v, l]) => (
-              <div key={l}>
+            ].map(([v, l], i) => (
+              <div key={l} className="rise" style={{ animationDelay: `${120 + i * 90}ms` }}>
                 <dt className="font-display text-2xl font-semibold text-accent">{v}</dt>
                 <dd className="text-xs uppercase tracking-[0.16em] text-primary-foreground/60">{l}</dd>
               </div>
@@ -75,8 +77,9 @@ function LoginPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center bg-background px-5 py-14 sm:px-10">
-        <div className="w-full max-w-sm">
+      <div className="relative flex items-center justify-center bg-background px-5 py-14 sm:px-10">
+        <div className="grid-fade pointer-events-none absolute inset-0 opacity-60" />
+        <div className="relative w-full max-w-sm rise">
           <div className="lg:hidden">
             <LogoLockup />
           </div>
@@ -84,7 +87,7 @@ function LoginPage() {
             <div className="inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-secondary-foreground">
               <Leaf className="h-3.5 w-3.5" /> Forest Department
             </div>
-            <h1 className="mt-4 font-display text-2xl font-semibold text-foreground">Portal sign-in</h1>
+            <h1 className="text-gradient mt-4 font-display text-2xl font-semibold">Portal sign-in</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Enter your departmental username and password to continue.
             </p>
@@ -93,7 +96,7 @@ function LoginPage() {
           <form onSubmit={submit} className="mt-8 space-y-4">
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Username</span>
-              <div className="mt-1.5 flex items-center gap-2 rounded-md border border-input bg-card px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/25">
+              <div className="mt-1.5 flex items-center gap-2 rounded-md border border-input bg-card px-3 transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/25">
                 <User className="h-4 w-4 text-muted-foreground" />
                 <input
                   value={username}
@@ -106,7 +109,7 @@ function LoginPage() {
             </label>
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Password</span>
-              <div className="mt-1.5 flex items-center gap-2 rounded-md border border-input bg-card px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/25">
+              <div className="mt-1.5 flex items-center gap-2 rounded-md border border-input bg-card px-3 transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/25">
                 <Lock className="h-4 w-4 text-muted-foreground" />
                 <input
                   type="password"
@@ -123,7 +126,7 @@ function LoginPage() {
 
             <button
               type="submit"
-              className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-panel)] transition-colors hover:bg-primary/90"
+              className="sheen w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-panel)] transition-all hover:bg-primary/90 hover:shadow-[var(--shadow-lift)] active:translate-y-px"
             >
               Sign in
             </button>

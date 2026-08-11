@@ -54,19 +54,20 @@ function GmDashboard() {
   return (
     <AppShell session={session} title="Oversight Dashboard" subtitle="Consolidated plantation returns · All divisions">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat icon={Building2} label="Districts reporting" value={`${districts.length} / 7`} note="All divisions filed" />
-        <Stat icon={Ruler} label="Total area" value={`${totalArea.toFixed(1)} ha`} note={filter === "all" ? "Across all districts" : filter} />
-        <Stat icon={Layers} label="Entries" value={String(rows.length)} note="Rotation-wise records" />
+        <Stat icon={Building2} label="Districts reporting" value={`${districts.length} / 7`} note="All divisions filed" delay={0} />
+        <Stat icon={Ruler} label="Total area" value={`${totalArea.toFixed(1)} ha`} note={filter === "all" ? "Across all districts" : filter} delay={70} />
+        <Stat icon={Layers} label="Entries" value={String(rows.length)} note="Rotation-wise records" delay={140} />
         <Stat
           icon={TrendingUp}
           label="Avg. area / entry"
           value={`${(totalArea / Math.max(rows.length, 1)).toFixed(1)} ha`}
           note="Current selection"
+          delay={210}
         />
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
+        <div className="rise overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "80ms" }}>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
             <div>
               <h2 className="font-display text-sm font-semibold text-foreground">Combined register</h2>
@@ -102,7 +103,7 @@ function GmDashboard() {
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={r.id} className="text-sm odd:bg-card even:bg-secondary/25 hover:bg-accent/15">
+                  <tr key={r.id} className="text-sm transition-colors odd:bg-card even:bg-secondary/25 hover:bg-accent/15">
                     <td className="border-b border-border px-3 py-2.5 tabular-nums text-muted-foreground">{i + 1}</td>
                     <td className="border-b border-border px-3 py-2.5">
                       <div className="font-medium text-foreground">{r.dmName}</div>
@@ -132,11 +133,11 @@ function GmDashboard() {
           </div>
         </div>
 
-        <aside className="rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)]">
+        <aside className="rise h-fit rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)]" style={{ animationDelay: "160ms" }}>
           <h2 className="font-display text-sm font-semibold text-foreground">Area by district</h2>
           <p className="text-xs text-muted-foreground">Hectares reported, 2023–2026</p>
           <ul className="mt-5 space-y-4">
-            {perDistrict.map((p) => (
+            {perDistrict.map((p, i) => (
               <li key={p.district}>
                 <div className="flex items-baseline justify-between text-xs">
                   <button
@@ -149,8 +150,8 @@ function GmDashboard() {
                 </div>
                 <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
                   <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${(p.area / maxArea) * 100}%` }}
+                    className="bar-grow h-full rounded-full bg-primary"
+                    style={{ width: `${(p.area / maxArea) * 100}%`, animationDelay: `${i * 60}ms` }}
                   />
                 </div>
               </li>
@@ -173,21 +174,27 @@ function Stat({
   label,
   value,
   note,
+  delay = 0,
 }: {
   icon: typeof Ruler;
   label: string;
   value: string;
   note: string;
+  delay?: number;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)]">
+    <div
+      className="card-lift rise relative overflow-hidden rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)]"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-primary/5" />
       <div className="flex items-center justify-between">
         <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
         <div className="grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary">
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-3 font-display text-2xl font-semibold text-foreground">{value}</div>
+      <div className="text-gradient mt-3 font-display text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{note}</div>
     </div>
   );

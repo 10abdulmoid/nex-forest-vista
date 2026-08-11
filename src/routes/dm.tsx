@@ -77,7 +77,8 @@ function DmDashboard() {
 
   return (
     <AppShell session={session} title="Plantation Register" subtitle={`Maintenance returns · ${session.district} Division`}>
-      <section className="topo-texture relative overflow-hidden rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)] sm:p-6">
+      <section className="topo-texture rise relative overflow-hidden rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)] sm:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-primary/5 blur-2xl" />
         <div className="relative grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Identity icon={UserCheck} label="Area DM Name" value={session.name} />
           <Identity icon={MapPin} label="Location of Plantation" value={session.location ?? "—"} />
@@ -92,7 +93,7 @@ function DmDashboard() {
         </div>
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
+      <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "90ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
           <div>
             <h2 className="font-display text-sm font-semibold text-foreground">Plantation entries</h2>
@@ -100,7 +101,7 @@ function DmDashboard() {
           </div>
           <button
             onClick={commitDraft}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="sheen inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-[var(--shadow-lift)] active:translate-y-px"
           >
             <Plus className="h-3.5 w-3.5" /> Add row
           </button>
@@ -120,7 +121,7 @@ function DmDashboard() {
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.id} className="odd:bg-card even:bg-secondary/25 hover:bg-accent/15">
+                <tr key={r.id} className="group transition-colors odd:bg-card even:bg-secondary/25 hover:bg-accent/15">
                   <td className="border-b border-border px-3 py-2 text-sm tabular-nums text-muted-foreground">{i + 1}</td>
                   <td className="border-b border-border p-0">
                     <input
@@ -222,7 +223,7 @@ function Identity({
 }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+      <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary transition-transform hover:scale-105">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">
