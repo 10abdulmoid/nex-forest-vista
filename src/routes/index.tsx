@@ -42,7 +42,7 @@ function LoginPage() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative hidden flex-col justify-between p-12 text-primary-foreground lg:flex" style={{ background: "var(--gradient-forest)" }}>
+      <div className="relative hidden flex-col justify-center gap-16 p-12 text-primary-foreground lg:flex" style={{ background: "var(--gradient-forest)" }}>
         <div className="topo-texture absolute inset-0 opacity-70" />
         <div className="relative">
           <div className="[&_.text-foreground]:text-primary-foreground [&_.text-primary]:text-accent [&_.text-muted-foreground]:text-primary-foreground/60">

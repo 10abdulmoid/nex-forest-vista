@@ -107,7 +107,6 @@ export function AppShell({
                 </div>
               </div>
               <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                {session.name.slice(-2, -1)}
                 {session.name.split(" ").pop()?.[0]}
               </div>
             </div>
