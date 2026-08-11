@@ -51,15 +51,15 @@ function seeded(i: number) {
 }
 
 export const mockEntries: Entry[] = districts.flatMap((d, di) => {
-  const ranges = rangesByDistrict[d.district];
+  const ranges = rangesByDistrict[d.district] ?? ["Range I"];
   return Array.from({ length: 5 }, (_, ri) => {
     const k = Math.abs(seeded(di * 7 + ri + 1));
     return {
       id: `${d.district}-${ri}`,
       rotation: (ri % 4) + 1,
       area: Math.round((18 + k * 120) * 10) / 10,
-      maintenanceYear: years[(di + ri) % years.length],
-      range: ranges[ri % ranges.length],
+      maintenanceYear: years[(di + ri) % years.length]!,
+      range: ranges[ri % ranges.length]!,
       dmName: d.name,
       district: d.district,
     };
