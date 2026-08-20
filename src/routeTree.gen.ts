@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DmRouteImport } from './routes/dm'
 import { Route as GmRouteImport } from './routes/gm'
+import { Route as GmIndexRouteImport } from './routes/gm.index'
+import { Route as GmReportsRouteImport } from './routes/gm.reports'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +30,50 @@ const GmRoute = GmRouteImport.update({
   path: '/gm',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GmIndexRoute = GmIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GmRoute,
+} as any)
+const GmReportsRoute = GmReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => GmRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dm': typeof DmRoute
-  '/gm': typeof GmRoute
+  '/gm': typeof GmRouteWithChildren
+  '/gm/reports': typeof GmReportsRoute
+  '/gm/': typeof GmIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dm': typeof DmRoute
-  '/gm': typeof GmRoute
+  '/gm/reports': typeof GmReportsRoute
+  '/gm': typeof GmIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dm': typeof DmRoute
-  '/gm': typeof GmRoute
+  '/gm': typeof GmRouteWithChildren
+  '/gm/reports': typeof GmReportsRoute
+  '/gm/': typeof GmIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dm' | '/gm'
+  fullPaths: '/' | '/dm' | '/gm' | '/gm/reports' | '/gm/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dm' | '/gm'
-  id: '__root__' | '/' | '/dm' | '/gm'
+  to: '/' | '/dm' | '/gm/reports' | '/gm'
+  id: '__root__' | '/' | '/dm' | '/gm' | '/gm/reports' | '/gm/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DmRoute: typeof DmRoute
-  GmRoute: typeof GmRoute
+  GmRoute: typeof GmRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -82,14 +99,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GmRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gm/': {
+      id: '/gm/'
+      path: '/'
+      fullPath: '/gm/'
+      preLoaderRoute: typeof GmIndexRouteImport
+      parentRoute: typeof GmRoute
+    }
+    '/gm/reports': {
+      id: '/gm/reports'
+      path: '/reports'
+      fullPath: '/gm/reports'
+      preLoaderRoute: typeof GmReportsRouteImport
+      parentRoute: typeof GmRoute
+    }
   }
 }
+
+interface GmRouteChildren {
+  GmReportsRoute: typeof GmReportsRoute
+  GmIndexRoute: typeof GmIndexRoute
+}
+
+const GmRouteChildren: GmRouteChildren = {
+  GmReportsRoute: GmReportsRoute,
+  GmIndexRoute: GmIndexRoute,
+}
+
+const GmRouteWithChildren = GmRoute._addFileChildren(GmRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DmRoute: DmRoute,
-  GmRoute: GmRoute,
+  GmRoute: GmRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

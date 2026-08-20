@@ -5,11 +5,29 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { loadEnv } from "vite";
+
+const env = loadEnv(process.env.NODE_ENV || "development", process.cwd(), "");
+const supabaseOrigin = (env.VITE_SUPABASE_URL || env.SUPABASE_URL || "").replace(/\/$/, "");
 
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  vite: {
+    server: {
+      proxy: supabaseOrigin
+        ? {
+            "/sb": {
+              target: supabaseOrigin,
+              changeOrigin: true,
+              secure: true,
+              rewrite: (path) => path.replace(/^\/sb/, "") || "/",
+            },
+          }
+        : undefined,
+    },
   },
 });

@@ -1,39 +1,69 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { MapPin, Plus, Ruler, Trash2, UserCheck } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Eye, FilePlus2, FileText, MapPin, Save, Send, Trash2, UserCheck } from "lucide-react";
 import { AppShell } from "@/components/nex/AppShell";
+import { SpreadsheetGrid, type SpreadsheetHandle } from "@/components/nex/SpreadsheetGrid";
+import { formatIst } from "@/lib/login-activity";
+import { getSession, type Session } from "@/lib/nex-data";
 import {
-  getSession,
-  mockEntries,
-  rangesFor,
-  type Entry,
-  type Session,
-} from "@/lib/nex-data";
+  defaultSpreadsheet,
+  deleteReport,
+  loadMyReports,
+  saveReport,
+  type SheetColumn,
+  type SheetRow,
+  type SpreadsheetDoc,
+} from "@/lib/spreadsheet";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/dm")({
   head: () => ({
     meta: [
-      { title: "District Manager Register · NEX-FOREST" },
+      { title: "District Manager Desk · NEX-FOREST" },
       {
         name: "description",
-        content:
-          "District Manager plantation register: record rotation, area in hectares, maintenance year and range for your division.",
-      },
-      { property: "og:title", content: "District Manager Register · NEX-FOREST" },
-      {
-        property: "og:description",
-        content: "Inline spreadsheet-style plantation reporting for Forest Department District Managers.",
+        content: "Create plantation reports and review submissions for your division.",
       },
     ],
   }),
   component: DmDashboard,
 });
 
-const emptyDraft = { rotation: "", area: "", maintenanceYear: "", range: "" };
+type Screen = "home" | "editor" | "viewer";
+
+function defaultTitle() {
+  return `Plantation report · ${new Date().toLocaleDateString("en-IN")}`;
+}
 
 function DmDashboard() {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [reports, setReports] = useState<SpreadsheetDoc[]>([]);
+  const [screen, setScreen] = useState<Screen>("home");
+  const [reportId, setReportId] = useState<string | undefined>();
+  const [title, setTitle] = useState(defaultTitle);
+  const [columns, setColumns] = useState<SheetColumn[]>(defaultSpreadsheet().columns);
+  const [rows, setRows] = useState<SheetRow[]>(defaultSpreadsheet().rows);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [createdAt, setCreatedAt] = useState(new Date().toISOString());
+  const [includeAbstract, setIncludeAbstract] = useState(false);
+  const [abstractColumns, setAbstractColumns] = useState<SheetColumn[]>(defaultSpreadsheet().columns);
+  const [abstractRows, setAbstractRows] = useState<SheetRow[]>(defaultSpreadsheet().rows);
+  const columnsRef = useRef(columns);
+  const rowsRef = useRef(rows);
+  const abstractColumnsRef = useRef(abstractColumns);
+  const abstractRowsRef = useRef(abstractRows);
+  const mainGridRef = useRef<SpreadsheetHandle>(null);
+  const abstractGridRef = useRef<SpreadsheetHandle>(null);
+  columnsRef.current = columns;
+  rowsRef.current = rows;
+  abstractColumnsRef.current = abstractColumns;
+  abstractRowsRef.current = abstractRows;
 
   useEffect(() => {
     const s = getSession();
@@ -41,174 +71,438 @@ function DmDashboard() {
     else setSession(s);
   }, [navigate]);
 
-  const [rows, setRows] = useState<Entry[]>([]);
-  const [draft, setDraft] = useState(emptyDraft);
+  const refreshReports = async (uid: string) => {
+    const docs = await loadMyReports(uid);
+    setReports(docs);
+  };
 
   useEffect(() => {
-    if (session?.district) setRows(mockEntries.filter((e) => e.district === session.district));
-  }, [session]);
+    if (!session) return;
+    const load = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate({ to: "/" });
+        return;
+      }
+      setUserId(user.id);
+      try {
+        await refreshReports(user.id);
+        setError("");
+      } catch (err) {
+        console.error(err);
+        setError("Could not load your reports.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [session, navigate]);
 
-  const totalArea = useMemo(() => rows.reduce((a, r) => a + r.area, 0), [rows]);
+  const drafts = useMemo(() => reports.filter((r) => r.status !== "submitted"), [reports]);
+  const submitted = useMemo(() => reports.filter((r) => r.status === "submitted"), [reports]);
 
   if (!session) return null;
 
-  const update = (id: string, patch: Partial<Entry>) =>
-    setRows((r) => r.map((row) => (row.id === id ? { ...row, ...patch } : row)));
-
-  const commitDraft = () => {
-    if (!draft.rotation && !draft.area && !draft.maintenanceYear && !draft.range) return;
-    setRows((r) => [
-      ...r,
-      {
-        id: `new-${Date.now()}`,
-        rotation: Number(draft.rotation) || 1,
-        area: Number(draft.area) || 0,
-        maintenanceYear: draft.maintenanceYear || "2025-26",
-        range: draft.range || rangesFor(session.district!)[0] || "—",
-        dmName: session.name,
-        district: session.district!,
-      },
-    ]);
-    setDraft(emptyDraft);
+  const openNew = () => {
+    const blank = defaultSpreadsheet();
+    setReportId(undefined);
+    setTitle(defaultTitle());
+    setColumns(blank.columns);
+    setRows(blank.rows);
+    setStatus("");
+    setError("");
+    setCreatedAt(new Date().toISOString());
+    setIncludeAbstract(false);
+    const blankAbstract = defaultSpreadsheet();
+    setAbstractColumns(blankAbstract.columns);
+    setAbstractRows(blankAbstract.rows);
+    setScreen("editor");
   };
 
-  const cellCls =
-    "w-full bg-transparent px-3 py-2.5 text-sm text-foreground outline-none focus:bg-secondary/70 focus:ring-1 focus:ring-inset focus:ring-primary/40";
+  const openReport = (doc: SpreadsheetDoc, mode: Screen) => {
+    setReportId(doc.id);
+    setTitle(doc.title || "Plantation report");
+    setColumns(Array.isArray(doc.columns) && doc.columns.length ? doc.columns : defaultSpreadsheet().columns);
+    setRows(Array.isArray(doc.rows) && doc.rows.length ? doc.rows : defaultSpreadsheet().rows);
+    setStatus("");
+    setError("");
+    setCreatedAt(doc.created_at || new Date().toISOString());
+    setIncludeAbstract(Boolean(doc.includeAbstract && doc.abstract));
+    const blankAbstract = defaultSpreadsheet();
+    setAbstractColumns(doc.abstract?.columns?.length ? doc.abstract.columns : blankAbstract.columns);
+    setAbstractRows(doc.abstract?.rows?.length ? doc.abstract.rows : blankAbstract.rows);
+    setScreen(mode);
+  };
+
+  const persist = async (nextStatus: "draft" | "submitted") => {
+    if (!userId || !session.district) {
+      setError("You must be signed in to save.");
+      return;
+    }
+    const main = mainGridRef.current?.snapshot() ?? { columns: columnsRef.current, rows: rowsRef.current };
+    const abstractSnap = includeAbstract
+      ? (abstractGridRef.current?.snapshot() ?? { columns: abstractColumnsRef.current, rows: abstractRowsRef.current })
+      : null;
+    columnsRef.current = main.columns;
+    rowsRef.current = main.rows;
+    if (abstractSnap) {
+      abstractColumnsRef.current = abstractSnap.columns;
+      abstractRowsRef.current = abstractSnap.rows;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await saveReport({
+        id: reportId,
+        userId,
+        username: session.username,
+        district: session.district,
+        title,
+        status: nextStatus,
+        columns: main.columns,
+        rows: main.rows,
+        createdAt,
+        includeAbstract,
+        abstract: includeAbstract && abstractSnap ? abstractSnap : null,
+      });
+      setReportId(saved.id);
+      await refreshReports(userId);
+      if (nextStatus === "submitted") {
+        setStatus(`Submitted ${new Date().toLocaleTimeString("en-IN")}`);
+        setScreen("home");
+      } else {
+        setStatus(`Progress saved ${new Date().toLocaleTimeString("en-IN")}. You can leave and continue this report later.`);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Could not save the report.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeDraft = async (doc: SpreadsheetDoc) => {
+    if (!userId || !doc.id) return;
+    const label = doc.title || "Plantation report";
+    if (!window.confirm(`Delete "${label}"? This draft cannot be recovered.`)) return;
+    setDeletingId(doc.id);
+    setError("");
+    try {
+      await deleteReport({ userId, reportId: doc.id });
+      if (reportId === doc.id) {
+        setReportId(undefined);
+        setScreen("home");
+      }
+      await refreshReports(userId);
+      setStatus(`Deleted "${label}"`);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Could not delete the report.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  if (screen === "editor" || screen === "viewer") {
+    const readOnly = screen === "viewer";
+    return (
+      <AppShell session={session} title="Plantation Register" subtitle={`${session.district} Division`}>
+        <section className="rise overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setScreen("home");
+                  setStatus("");
+                  setError("");
+                }}
+                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to desk
+              </button>
+              {readOnly ? (
+                <h2 className="font-display text-sm font-semibold text-foreground">{title}</h2>
+              ) : (
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full max-w-xl rounded-md border border-input bg-background px-3 py-2 text-sm font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring/25"
+                  placeholder="Report title"
+                />
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                {readOnly
+                  ? "Submitted report · read only"
+                  : "Fill the sheet in parts. Save keeps your progress on this desk. Submit sends the report to the GM office."}
+              </p>
+              {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+              {status && !error && <p className="mt-1 text-xs text-muted-foreground">{status}</p>}
+            </div>
+            {!readOnly && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => persist("draft")}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-70"
+                >
+                  <Save className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persist("submitted")}
+                  disabled={saving}
+                  className="sheen inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
+                >
+                  <Send className="h-3.5 w-3.5" /> Submit
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="border-b border-border bg-sand/40 px-5 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Main report
+          </div>
+          <SpreadsheetGrid
+            ref={mainGridRef}
+            key={`${reportId ?? "new"}-main`}
+            readOnly={readOnly}
+            usedOnly={readOnly}
+            columns={columns}
+            rows={rows}
+            onChange={(next) => {
+              columnsRef.current = next.columns;
+              rowsRef.current = next.rows;
+            }}
+          />
+        </section>
+
+        <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
+          <div className="border-b border-border px-5 py-4">
+            <h3 className="font-display text-sm font-semibold text-foreground">Create abstract report?</h3>
+            <p className="mt-1 text-xs text-muted-foreground">If yes, a second spreadsheet (same layout as the main report) is added below and submitted together.</p>
+            {!readOnly && (
+              <div className="mt-3 flex gap-4 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="abstract"
+                    checked={!includeAbstract}
+                    onChange={() => setIncludeAbstract(false)}
+                  />
+                  No
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="abstract"
+                    checked={includeAbstract}
+                    onChange={() => {
+                      setIncludeAbstract(true);
+                      if (!abstractColumns.length) {
+                        const blank = defaultSpreadsheet();
+                        setAbstractColumns(blank.columns);
+                        setAbstractRows(blank.rows);
+                      }
+                    }}
+                  />
+                  Yes
+                </label>
+              </div>
+            )}
+            {readOnly && <p className="mt-2 text-sm text-foreground">{includeAbstract ? "Yes · abstract included" : "No"}</p>}
+          </div>
+          {includeAbstract && (
+            <>
+              <div className="border-b border-border bg-sand/40 px-5 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Abstract report
+              </div>
+              <SpreadsheetGrid
+                ref={abstractGridRef}
+                key={`${reportId ?? "new"}-abstract`}
+                readOnly={readOnly}
+                usedOnly={readOnly}
+                columns={abstractColumns}
+                rows={abstractRows}
+                onChange={(next) => {
+                  abstractColumnsRef.current = next.columns;
+                  abstractRowsRef.current = next.rows;
+                }}
+              />
+            </>
+          )}
+        </section>
+
+        {!readOnly && (
+          <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
+            <div className="border-b border-border px-5 py-4">
+              <h3 className="font-display text-sm font-semibold text-foreground">Save progress</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Store this spreadsheet as an in-progress draft. It will appear on your desk so you can continue later and submit when the report is complete.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => persist("draft")}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-70"
+              >
+                <Save className="h-4 w-4" /> {saving ? "Saving…" : "Save progress"}
+              </button>
+              <button
+                type="button"
+                onClick={() => persist("submitted")}
+                disabled={saving}
+                className="sheen inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
+              >
+                <Send className="h-4 w-4" /> Submit to GM
+              </button>
+              {status && !error && <span className="text-xs text-muted-foreground">{status}</span>}
+              {error && <span className="text-xs text-destructive">{error}</span>}
+            </div>
+          </section>
+        )}
+      </AppShell>
+    );
+  }
 
   return (
-    <AppShell session={session} title="Plantation Register" subtitle={`Maintenance returns · ${session.district} Division`}>
+    <AppShell session={session} title="Division desk" subtitle={`${session.district} Division`}>
       <section className="topo-texture rise relative overflow-hidden rounded-lg border border-border bg-card p-5 shadow-[var(--shadow-panel)] sm:p-6">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-primary/5 blur-2xl" />
-        <div className="relative grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Identity icon={UserCheck} label="Area DM Name" value={session.name} />
+        <div className="relative grid gap-5 sm:grid-cols-2">
+          <Identity icon={UserCheck} label="Assigned Account ID" value={session.username} />
           <Identity icon={MapPin} label="Location of Plantation" value={session.location ?? "—"} />
-          <Identity
-            icon={Ruler}
-            label="Total reported area"
-            value={`${totalArea.toFixed(1)} hectare · ${rows.length} entries`}
-          />
-        </div>
-        <div className="relative mt-4 inline-flex rounded-full bg-secondary px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-secondary-foreground">
-          Read-only identity · Auto-filled from account
         </div>
       </section>
 
-      <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "90ms" }}>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
-          <div>
-            <h2 className="font-display text-sm font-semibold text-foreground">Plantation entries</h2>
-            <p className="text-xs text-muted-foreground">Edit any cell directly. New rows are added at the bottom.</p>
-          </div>
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+      {status && !error && <p className="mt-4 text-sm text-muted-foreground">{status}</p>}
+
+      <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="font-display text-sm font-semibold text-foreground">1. Create a report</h2>
+          <p className="text-xs text-muted-foreground">Open a new spreadsheet to prepare a plantation return for this division.</p>
+        </div>
+        <div className="p-5">
           <button
-            onClick={commitDraft}
-            className="sheen inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-[var(--shadow-lift)] active:translate-y-px"
+            type="button"
+            onClick={openNew}
+            className="sheen inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
-            <Plus className="h-3.5 w-3.5" /> Add row
+            <FilePlus2 className="h-4 w-4" /> Create report
           </button>
         </div>
+      </section>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-left">
-            <thead>
-              <tr className="bg-sand/70 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                <th className="w-16 border-b border-border px-3 py-3 font-semibold">S.No</th>
-                <th className="border-b border-border px-3 py-3 font-semibold">Rotation</th>
-                <th className="border-b border-border px-3 py-3 font-semibold">Area (hectare)</th>
-                <th className="border-b border-border px-3 py-3 font-semibold">Maintenance Year</th>
-                <th className="border-b border-border px-3 py-3 font-semibold">Name of the Range</th>
-                <th className="w-12 border-b border-border px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.id} className="group transition-colors odd:bg-card even:bg-secondary/25 hover:bg-accent/15">
-                  <td className="border-b border-border px-3 py-2 text-sm tabular-nums text-muted-foreground">{i + 1}</td>
-                  <td className="border-b border-border p-0">
-                    <input
-                      className={cellCls + " tabular-nums"}
-                      value={r.rotation}
-                      onChange={(e) => update(r.id, { rotation: Number(e.target.value) || 0 })}
-                    />
-                  </td>
-                  <td className="border-b border-border p-0">
-                    <input
-                      className={cellCls + " tabular-nums"}
-                      value={r.area}
-                      onChange={(e) => update(r.id, { area: Number(e.target.value) || 0 })}
-                    />
-                  </td>
-                  <td className="border-b border-border p-0">
-                    <input
-                      className={cellCls}
-                      value={r.maintenanceYear}
-                      onChange={(e) => update(r.id, { maintenanceYear: e.target.value })}
-                    />
-                  </td>
-                  <td className="border-b border-border p-0">
-                    <input
-                      className={cellCls}
-                      value={r.range}
-                      onChange={(e) => update(r.id, { range: e.target.value })}
-                    />
-                  </td>
-                  <td className="border-b border-border px-2 text-center">
-                    <button
-                      onClick={() => setRows((rr) => rr.filter((x) => x.id !== r.id))}
-                      className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                      aria-label={`Delete row ${i + 1}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-secondary/40">
-                <td className="px-3 py-2 text-sm text-muted-foreground">{rows.length + 1}</td>
-                {(["rotation", "area", "maintenanceYear", "range"] as const).map((k) => (
-                  <td key={k} className="p-0">
-                    <input
-                      className={cellCls + " placeholder:text-muted-foreground/60"}
-                      placeholder={
-                        k === "rotation"
-                          ? "1-4"
-                          : k === "area"
-                            ? "e.g. 42.5"
-                            : k === "maintenanceYear"
-                              ? "2025-26"
-                              : "Range name"
-                      }
-                      value={draft[k]}
-                      onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
-                      onKeyDown={(e) => e.key === "Enter" && commitDraft()}
-                    />
-                  </td>
-                ))}
-                <td className="px-2 text-center">
-                  <button
-                    onClick={commitDraft}
-                    className="rounded p-1.5 text-primary hover:bg-primary/10"
-                    aria-label="Commit new row"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr className="bg-sand/70 text-sm font-semibold text-foreground">
-                <td className="px-3 py-3" colSpan={2}>
-                  Total
-                </td>
-                <td className="px-3 py-3 tabular-nums">{totalArea.toFixed(1)} ha</td>
-                <td className="px-3 py-3 text-muted-foreground" colSpan={3}>
-                  {rows.length} entries recorded
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+      <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "50ms" }}>
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="font-display text-sm font-semibold text-foreground">2. Saved in progress</h2>
+          <p className="text-xs text-muted-foreground">Drafts stored with Save. Continue any row to add more, then Submit when ready.</p>
         </div>
+        {loading ? (
+          <p className="px-5 py-8 text-sm text-muted-foreground">Loading drafts…</p>
+        ) : (
+          <ReportTable
+            reports={drafts}
+            empty="No saved drafts yet. Open a report and choose Save progress to keep work in parts."
+            actionLabel="Continue"
+            onAction={(doc) => openReport(doc, "editor")}
+            onDelete={removeDraft}
+            deletingId={deletingId}
+          />
+        )}
+      </section>
+
+      <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "80ms" }}>
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="font-display text-sm font-semibold text-foreground">3. Submitted reports</h2>
+          <p className="text-xs text-muted-foreground">Reports already sent from this division. Open any row to review the sheet.</p>
+        </div>
+        {loading ? (
+          <p className="px-5 py-8 text-sm text-muted-foreground">Loading reports…</p>
+        ) : (
+          <ReportTable
+            reports={submitted}
+            empty="No reports submitted yet. Create a report and choose Submit."
+            actionLabel="View"
+            actionIcon={Eye}
+            onAction={(doc) => openReport(doc, "viewer")}
+          />
+        )}
       </section>
     </AppShell>
+  );
+}
+
+function ReportTable({
+  reports,
+  empty,
+  actionLabel,
+  actionIcon: ActionIcon = FileText,
+  onAction,
+  onDelete,
+  deletingId,
+}: {
+  reports: SpreadsheetDoc[];
+  empty: string;
+  actionLabel: string;
+  actionIcon?: typeof Eye;
+  onAction: (doc: SpreadsheetDoc) => void;
+  onDelete?: (doc: SpreadsheetDoc) => void;
+  deletingId?: string | null;
+}) {
+  if (!reports.length) {
+    return empty ? <p className="px-5 py-8 text-sm text-muted-foreground">{empty}</p> : null;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] border-collapse text-left">
+        <thead>
+          <tr className="bg-sand/70 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+            <th className="w-14 border-b border-border px-3 py-3 font-semibold">S.No</th>
+            <th className="border-b border-border px-3 py-3 font-semibold">Report</th>
+            <th className="border-b border-border px-3 py-3 font-semibold">Last updated</th>
+            <th className="border-b border-border px-3 py-3 font-semibold">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {reports.map((doc, i) => (
+            <tr key={doc.id ?? i} className="text-sm odd:bg-card even:bg-secondary/25">
+              <td className="border-b border-border px-3 py-2.5 tabular-nums text-muted-foreground">{i + 1}</td>
+              <td className="border-b border-border px-3 py-2.5 font-medium text-foreground">
+                {doc.title || "Plantation report"}
+                {doc.includeAbstract ? <span className="ml-2 text-[11px] font-semibold text-primary">+ Abstract</span> : null}
+              </td>
+              <td className="border-b border-border px-3 py-2.5 tabular-nums text-foreground">{formatIst(doc.updated_at)}</td>
+              <td className="border-b border-border px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onAction(doc)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                  >
+                    <ActionIcon className="h-3.5 w-3.5" /> {actionLabel}
+                  </button>
+                  {onDelete && doc.id && (
+                    <button
+                      type="button"
+                      onClick={() => onDelete(doc)}
+                      disabled={deletingId === doc.id}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive hover:underline disabled:opacity-60"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> {deletingId === doc.id ? "Deleting…" : "Delete"}
+                    </button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -223,7 +517,7 @@ function Identity({
 }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary transition-transform hover:scale-105">
+      <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">
