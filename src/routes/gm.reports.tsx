@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Eye, Search } from "lucide-react";
+import { ArrowLeft, Download, Eye, Search } from "lucide-react";
 import { AppShell } from "@/components/nex/AppShell";
 import { SpreadsheetGrid } from "@/components/nex/SpreadsheetGrid";
 import { formatIst } from "@/lib/login-activity";
 import { districts, getSession, type Session } from "@/lib/nex-data";
+import { downloadReportPdf } from "@/lib/report-export";
 import { loadAllSpreadsheets, type SpreadsheetDoc } from "@/lib/spreadsheet";
 import { supabase } from "@/lib/supabase";
 
@@ -79,6 +80,7 @@ function GmReports() {
   const [dateTo, setDateTo] = useState("");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -167,6 +169,18 @@ function GmReports() {
 
   const openReport = reports.find((r, i) => reportKey(r, i) === openKey) ?? null;
 
+  const downloadPdf = (doc: SpreadsheetDoc) => {
+    try {
+      downloadReportPdf(doc);
+      setLoadError("");
+      setStatus(`Downloaded PDF for "${doc.title || "Plantation report"}"`);
+    } catch (err) {
+      console.error(err);
+      setStatus("");
+      setLoadError(err instanceof Error ? err.message : "Could not download PDF.");
+    }
+  };
+
   if (!session) return null;
 
   if (openReport) {
@@ -174,19 +188,30 @@ function GmReports() {
     return (
       <AppShell session={session} title="View reports" subtitle={`${openReport.title || "Plantation report"} · ${dm.district}`}>
         <section className="rise overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
-          <div className="border-b border-border px-5 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => setOpenKey(null)}
+                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to report list
+              </button>
+              <h2 className="font-display text-sm font-semibold text-foreground">{openReport.title || "Plantation report"}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dm.username} · {dm.district} Division · Submitted {formatIst(openReport.submitted_at || openReport.updated_at, { seconds: true })}
+                {openReport.includeAbstract ? " · Main + abstract" : ""}
+              </p>
+              {loadError && <p className="mt-1 text-xs text-destructive">{loadError}</p>}
+              {status && !loadError && <p className="mt-1 text-xs text-muted-foreground">{status}</p>}
+            </div>
             <button
               type="button"
-              onClick={() => setOpenKey(null)}
-              className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              onClick={() => downloadPdf(openReport)}
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to report list
+              <Download className="h-3.5 w-3.5" /> Download PDF
             </button>
-            <h2 className="font-display text-sm font-semibold text-foreground">{openReport.title || "Plantation report"}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {dm.username} · {dm.district} Division · Submitted {formatIst(openReport.submitted_at || openReport.updated_at, { seconds: true })}
-              {openReport.includeAbstract ? " · Main + abstract" : ""}
-            </p>
           </div>
           <div className="border-b border-border bg-sand/40 px-5 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Main report
@@ -285,6 +310,7 @@ function GmReports() {
           )}
         </div>
         {loadError && <p className="px-5 pt-4 text-sm text-destructive">{loadError}</p>}
+        {status && !loadError && <p className="px-5 pt-4 text-sm text-muted-foreground">{status}</p>}
         {loading ? (
           <p className="px-5 py-8 text-sm text-muted-foreground">Loading submitted reports…</p>
         ) : filtered.length === 0 ? (
@@ -327,13 +353,22 @@ function GmReports() {
                       <td className="border-b border-border px-3 py-2.5 tabular-nums text-foreground">{formatIst(doc.created_at, { seconds: true })}</td>
                       <td className="border-b border-border px-3 py-2.5 tabular-nums text-foreground">{formatIst(doc.submitted_at || doc.updated_at, { seconds: true })}</td>
                       <td className="border-b border-border px-3 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => setOpenKey(reportKey(doc, i))}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-secondary"
-                        >
-                          <Eye className="h-3.5 w-3.5" /> View
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setOpenKey(reportKey(doc, i))}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-secondary"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadPdf(doc)}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-secondary"
+                          >
+                            <Download className="h-3.5 w-3.5" /> PDF
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

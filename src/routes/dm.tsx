@@ -1,10 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Eye, FilePlus2, FileText, MapPin, Save, Send, Trash2, UserCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Eye,
+  FilePlus2,
+  FileText,
+  FileUp,
+  MapPin,
+  Save,
+  Send,
+  Trash2,
+  UserCheck,
+} from "lucide-react";
 import { AppShell } from "@/components/nex/AppShell";
 import { SpreadsheetGrid, type SpreadsheetHandle } from "@/components/nex/SpreadsheetGrid";
 import { formatIst } from "@/lib/login-activity";
 import { getSession, type Session } from "@/lib/nex-data";
+import { downloadReportPdf, pickXlsxFile, spreadsheetFromXlsxFile } from "@/lib/report-export";
 import {
   defaultSpreadsheet,
   deleteReport,
@@ -48,6 +61,7 @@ function DmDashboard() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createdAt, setCreatedAt] = useState(new Date().toISOString());
@@ -205,8 +219,58 @@ function DmDashboard() {
     }
   };
 
+  const downloadPdf = (doc: SpreadsheetDoc) => {
+    try {
+      downloadReportPdf(doc);
+      setError("");
+      setStatus(`Downloaded PDF for "${doc.title || "Plantation report"}"`);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Could not download PDF.");
+    }
+  };
+
+  const uploadXlsx = async () => {
+    if (!userId || !session.district) {
+      setError("You must be signed in to upload.");
+      return;
+    }
+    setUploading(true);
+    setError("");
+    try {
+      const file = await pickXlsxFile();
+      const parsed = await spreadsheetFromXlsxFile(file);
+      const saved = await saveReport({
+        userId,
+        username: session.username,
+        district: session.district,
+        title: parsed.title,
+        status: "draft",
+        columns: parsed.columns,
+        rows: parsed.rows,
+        createdAt: new Date().toISOString(),
+        includeAbstract: false,
+        abstract: null,
+      });
+      await refreshReports(userId);
+      setStatus(`Uploaded "${saved.title || parsed.title}" — saved in progress. Open it to edit or submit.`);
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "Could not upload the Excel file.";
+      if (!/cancelled|No file selected/i.test(message)) {
+        setError(message);
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (screen === "editor" || screen === "viewer") {
     const readOnly = screen === "viewer";
+    const viewingDoc =
+      readOnly && reportId
+        ? reports.find((r) => r.id === reportId) ?? null
+        : null;
     return (
       <AppShell session={session} title="Plantation Register" subtitle={`${session.district} Division`}>
         <section className="rise overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
@@ -260,6 +324,34 @@ function DmDashboard() {
                   <Send className="h-3.5 w-3.5" /> Submit
                 </button>
               </div>
+            )}
+            {readOnly && (
+              <button
+                type="button"
+                onClick={() =>
+                  downloadPdf(
+                    viewingDoc ?? {
+                      id: reportId,
+                      title,
+                      username: session.username,
+                      district: session.district,
+                      status: "submitted",
+                      columns,
+                      rows,
+                      created_at: createdAt,
+                      updated_at: createdAt,
+                      submitted_at: createdAt,
+                      includeAbstract,
+                      abstract: includeAbstract
+                        ? { columns: abstractColumns, rows: abstractRows }
+                        : null,
+                    },
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary"
+              >
+                <Download className="h-3.5 w-3.5" /> Download PDF
+              </button>
             )}
           </div>
           <div className="border-b border-border bg-sand/40 px-5 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -384,9 +476,11 @@ function DmDashboard() {
       <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-display text-sm font-semibold text-foreground">1. Create a report</h2>
-          <p className="text-xs text-muted-foreground">Open a new spreadsheet to prepare a plantation return for this division.</p>
+          <p className="text-xs text-muted-foreground">
+            Open a blank spreadsheet, or upload an Excel (.xlsx) file. Uploads are saved as in-progress drafts you can edit and submit.
+          </p>
         </div>
-        <div className="p-5">
+        <div className="flex flex-wrap gap-3 p-5">
           <button
             type="button"
             onClick={openNew}
@@ -394,20 +488,30 @@ function DmDashboard() {
           >
             <FilePlus2 className="h-4 w-4" /> Create report
           </button>
+          <button
+            type="button"
+            onClick={uploadXlsx}
+            disabled={uploading}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary disabled:opacity-70"
+          >
+            <FileUp className="h-4 w-4" /> {uploading ? "Uploading…" : "Upload Excel (.xlsx)"}
+          </button>
         </div>
       </section>
 
       <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "50ms" }}>
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-display text-sm font-semibold text-foreground">2. Saved in progress</h2>
-          <p className="text-xs text-muted-foreground">Drafts stored with Save. Continue any row to add more, then Submit when ready.</p>
+          <p className="text-xs text-muted-foreground">
+            Drafts from Save or Excel upload. Continue any row to edit, then Submit when ready.
+          </p>
         </div>
         {loading ? (
           <p className="px-5 py-8 text-sm text-muted-foreground">Loading drafts…</p>
         ) : (
           <ReportTable
             reports={drafts}
-            empty="No saved drafts yet. Open a report and choose Save progress to keep work in parts."
+            empty="No saved drafts yet. Create a report, Save progress, or upload an Excel (.xlsx) file."
             actionLabel="Continue"
             onAction={(doc) => openReport(doc, "editor")}
             onDelete={removeDraft}
@@ -430,6 +534,7 @@ function DmDashboard() {
             actionLabel="View"
             actionIcon={Eye}
             onAction={(doc) => openReport(doc, "viewer")}
+            onDownloadPdf={downloadPdf}
           />
         )}
       </section>
@@ -444,6 +549,7 @@ function ReportTable({
   actionIcon: ActionIcon = FileText,
   onAction,
   onDelete,
+  onDownloadPdf,
   deletingId,
 }: {
   reports: SpreadsheetDoc[];
@@ -452,6 +558,7 @@ function ReportTable({
   actionIcon?: typeof Eye;
   onAction: (doc: SpreadsheetDoc) => void;
   onDelete?: (doc: SpreadsheetDoc) => void;
+  onDownloadPdf?: (doc: SpreadsheetDoc) => void;
   deletingId?: string | null;
 }) {
   if (!reports.length) {
@@ -486,6 +593,15 @@ function ReportTable({
                   >
                     <ActionIcon className="h-3.5 w-3.5" /> {actionLabel}
                   </button>
+                  {onDownloadPdf && (
+                    <button
+                      type="button"
+                      onClick={() => onDownloadPdf(doc)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                    >
+                      <Download className="h-3.5 w-3.5" /> PDF
+                    </button>
+                  )}
                   {onDelete && doc.id && (
                     <button
                       type="button"
