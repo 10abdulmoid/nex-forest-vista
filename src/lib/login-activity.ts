@@ -115,6 +115,21 @@ export async function detectSignInLocation(): Promise<DeviceLocation> {
   }
 }
 
+/** Sign-in rows older than this are deleted and never shown. */
+export const LOGIN_ACTIVITY_RETENTION_DAYS = 3;
+
+export function loginActivitySinceIso(days = LOGIN_ACTIVITY_RETENTION_DAYS) {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+async function pruneOldLoginActivity() {
+  const { error } = await supabase.rpc("prune_login_activity_older_than_3_days");
+  // Older DBs without the migration still work; retention is enforced on fetch.
+  if (error && !/function|does not exist|404/i.test(error.message)) {
+    console.warn("Could not prune old login activity", error.message);
+  }
+}
+
 export async function recordLogin(input: {
   userId: string;
   username: string;
@@ -135,13 +150,17 @@ export async function recordLogin(input: {
     user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
   });
   if (error) throw error;
+  await pruneOldLoginActivity();
 }
 
 export async function fetchLoginActivity() {
+  await pruneOldLoginActivity();
+  const since = loginActivitySinceIso();
   const { data, error } = await supabase
     .from("login_activity")
     .select("id, user_id, username, role, district, logged_in_at, latitude, longitude, device_location, user_agent")
     .eq("role", "dm")
+    .gte("logged_in_at", since)
     .order("logged_in_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as LoginEvent[];

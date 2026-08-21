@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Building2, Clock, Layers, LogIn, Ruler } from "lucide-react";
 import { AppShell } from "@/components/nex/AppShell";
 import {
+  LOGIN_ACTIVITY_RETENTION_DAYS,
   fetchLoginActivity,
   formatIst,
   summarizeLoginsByDm,
@@ -11,6 +12,8 @@ import {
 import { getSession, type Session } from "@/lib/nex-data";
 import { loadAllSpreadsheets } from "@/lib/spreadsheet";
 import { supabase } from "@/lib/supabase";
+
+const RECENT_SIGNINS_PREVIEW = 5;
 
 export const Route = createFileRoute("/gm/")({
   head: () => ({
@@ -37,6 +40,7 @@ function GmDashboard() {
   const [logins, setLogins] = useState<LoginEvent[]>([]);
   const [sheetsCount, setSheetsCount] = useState(0);
   const [loadError, setLoadError] = useState("");
+  const [showAllSignIns, setShowAllSignIns] = useState(false);
 
   useEffect(() => {
     const s = getSession();
@@ -72,6 +76,11 @@ function GmDashboard() {
   const byDm = useMemo(() => summarizeLoginsByDm(logins), [logins]);
   const signedInToday = byDm.filter((d) => d.signedInToday).length;
   const everSignedIn = byDm.filter((d) => d.loginCount > 0).length;
+  const recentSignIns = useMemo(
+    () => (showAllSignIns ? logins : logins.slice(0, RECENT_SIGNINS_PREVIEW)),
+    [logins, showAllSignIns],
+  );
+  const hasMoreSignIns = logins.length > RECENT_SIGNINS_PREVIEW;
 
   if (!session) return null;
 
@@ -80,14 +89,22 @@ function GmDashboard() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat icon={Building2} label="Divisions" value="7 / 7" note={loadError || "Telangana TGFDC"} delay={0} />
         <Stat icon={LogIn} label="DMs signed in today" value={`${signedInToday} / 7`} note="India Standard Time" delay={70} />
-        <Stat icon={Clock} label="DMs with any login" value={`${everSignedIn} / 7`} note="Since tracking began" delay={140} />
+        <Stat
+          icon={Clock}
+          label="DMs with any login"
+          value={`${everSignedIn} / 7`}
+          note={`Last ${LOGIN_ACTIVITY_RETENTION_DAYS} days`}
+          delay={140}
+        />
         <Stat icon={Layers} label="Submitted reports" value={String(sheetsCount)} note="Open View reports in the sidebar" delay={210} />
       </section>
 
       <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]">
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-display text-sm font-semibold text-foreground">Login activity by District Manager</h2>
-          <p className="text-xs text-muted-foreground">Last sign-in, device location and total visits for each division</p>
+          <p className="text-xs text-muted-foreground">
+            Last sign-in, device location and visit counts for each division · last {LOGIN_ACTIVITY_RETENTION_DAYS} days
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-left">
@@ -132,12 +149,32 @@ function GmDashboard() {
       </section>
 
       <section className="rise mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-[var(--shadow-panel)]" style={{ animationDelay: "80ms" }}>
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="font-display text-sm font-semibold text-foreground">Recent DM sign-ins</h2>
-          <p className="text-xs text-muted-foreground">Newest first · timestamps in IST</p>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-5 py-4">
+          <div>
+            <h2 className="font-display text-sm font-semibold text-foreground">Recent DM sign-ins</h2>
+            <p className="text-xs text-muted-foreground">
+              Newest first · last {LOGIN_ACTIVITY_RETENTION_DAYS} days · timestamps in IST
+              {!showAllSignIns && logins.length > 0
+                ? ` · showing ${Math.min(RECENT_SIGNINS_PREVIEW, logins.length)} of ${logins.length}`
+                : showAllSignIns && logins.length > 0
+                  ? ` · showing all ${logins.length}`
+                  : ""}
+            </p>
+          </div>
+          {hasMoreSignIns && (
+            <button
+              type="button"
+              onClick={() => setShowAllSignIns((v) => !v)}
+              className="rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-primary hover:bg-secondary"
+            >
+              {showAllSignIns ? "Show top 5" : "View all"}
+            </button>
+          )}
         </div>
         {logins.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-muted-foreground">No District Manager sign-ins recorded yet.</p>
+          <p className="px-5 py-8 text-sm text-muted-foreground">
+            No District Manager sign-ins in the last {LOGIN_ACTIVITY_RETENTION_DAYS} days.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-left">
@@ -151,7 +188,7 @@ function GmDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {logins.slice(0, 50).map((e, i) => (
+                {recentSignIns.map((e, i) => (
                   <tr key={e.id} className="text-sm odd:bg-card even:bg-secondary/25">
                     <td className="border-b border-border px-3 py-2.5 tabular-nums text-muted-foreground">{i + 1}</td>
                     <td className="border-b border-border px-3 py-2.5 font-medium text-foreground">{e.username}</td>

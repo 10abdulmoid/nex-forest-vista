@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DmRouteImport } from './routes/dm'
 import { Route as GmRouteImport } from './routes/gm'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as GmIndexRouteImport } from './routes/gm.index'
 import { Route as GmReportsRouteImport } from './routes/gm.reports'
 
@@ -30,6 +31,11 @@ const GmRoute = GmRouteImport.update({
   path: '/gm',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GmIndexRoute = GmIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -45,12 +51,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dm': typeof DmRoute
   '/gm': typeof GmRouteWithChildren
+  '/terms': typeof TermsRoute
   '/gm/reports': typeof GmReportsRoute
   '/gm/': typeof GmIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dm': typeof DmRoute
+  '/terms': typeof TermsRoute
   '/gm/reports': typeof GmReportsRoute
   '/gm': typeof GmIndexRoute
 }
@@ -59,21 +67,23 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dm': typeof DmRoute
   '/gm': typeof GmRouteWithChildren
+  '/terms': typeof TermsRoute
   '/gm/reports': typeof GmReportsRoute
   '/gm/': typeof GmIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dm' | '/gm' | '/gm/reports' | '/gm/'
+  fullPaths: '/' | '/dm' | '/gm' | '/terms' | '/gm/reports' | '/gm/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dm' | '/gm/reports' | '/gm'
-  id: '__root__' | '/' | '/dm' | '/gm' | '/gm/reports' | '/gm/'
+  to: '/' | '/dm' | '/terms' | '/gm/reports' | '/gm'
+  id: '__root__' | '/' | '/dm' | '/gm' | '/terms' | '/gm/reports' | '/gm/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DmRoute: typeof DmRoute
   GmRoute: typeof GmRouteWithChildren
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -97,6 +107,13 @@ declare module '@tanstack/react-router' {
       path: '/gm'
       fullPath: '/gm'
       preLoaderRoute: typeof GmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gm/': {
@@ -132,6 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DmRoute: DmRoute,
   GmRoute: GmRouteWithChildren,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
